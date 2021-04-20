@@ -11,8 +11,8 @@ from xbox360controller import Xbox360Controller
 
 # https://github.com/gnea/grbl/wiki/Grbl-v1.1-Jogging#how-to-compute-incremental-distances
 
-F_max = 1000 # max feedrate [mm/min]
-a_max = 100 # max. acceleration [mm/s²]
+F_max = 6000 # max feedrate [mm/min]
+a_max = 1000 # max. acceleration [mm/s²]
 dt_idle = 0.1
 axis_threshold = 0.2
 
@@ -60,7 +60,10 @@ class SerialDummy(contextlib.AbstractContextManager):
 class GRBL(contextlib.AbstractContextManager):
     def __init__(self, serial_file=None):
         self._serial = SerialDummy() if serial_file is None else serial.Serial(serial_file,115200)
-        
+        print(self._serial.readline())
+        print(self._serial.readline())
+        self.unlock()
+
     def __enter__(self):
         self._serial.__enter__()
         return self
@@ -86,9 +89,21 @@ class GRBL(contextlib.AbstractContextManager):
         dt_min = 10e-3 # time it takes Grbl to parse and plan one jog command.
         N = 15 # Number of Grbl planner blocks.
         return max(dt_min, v**2 / (2*a_max*(N-1)))
-
-    @staticmethod
-    def cmd_jog(x, y, v):
+    
+    def send(self, line, need_ok=True):
+        self._serial.write(f"{line}\n".encode())
+        ret = self._serial.readline()
+        if need_ok and ret != b'ok\r\n':
+            raise Exception("Fuck, shit!", line, ret)
+    
+    def unlock(self):
+        self.send('$X', need_ok=False)
+        self._serial.readline()
+        
+    def home(self):
+        self.send('$H')
+    
+    def jog(self, x, y, v):
         """
         grbl jog command
         x: mm
@@ -96,20 +111,10 @@ class GRBL(contextlib.AbstractContextManager):
         v: mm/s
         """
         F = 60 * v
-        return f"$J=G91X{x:.3f}Y{y:.3f}F{F:.3f}"
-
-    @staticmethod
-    def cmd_jog_cancel():
-        return chr(0x85)
-    
-    def send(self, line):
-        self._serial.write(f"{line}\n".encode())
-    
-    def jog(self, x, y, v):
-        self.send(self.cmd_jog(x, y, v))
+        self.send(f"$J=G91X{x:.3f}Y{y:.3f}F{F:.3f}")
         
     def jog_cancel(self):
-        self.send(self.cmd_jog_cancel())
+        self.send(chr(0x85))
 
         
 def main(serial_file=None):
