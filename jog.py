@@ -9,6 +9,10 @@ from enum import Enum
 from xbox360controller import Xbox360Controller
 
 
+# \todo Error handling, specially error 15 which is soft stop.
+# \todo Don't normalize axis input feels strange when use of z-axis slows down x and y.
+
+
 # https://github.com/gnea/grbl/wiki/Grbl-v1.1-Jogging#how-to-compute-incremental-distances
 
 F_max = 6000 # max feedrate [mm/min]
@@ -30,14 +34,15 @@ class Joystick(contextlib.AbstractContextManager):
     def __exit__(self, exc_type, exc_value, traceback):
         self._joystick.__exit__(exc_type, exc_value, traceback)
         
-    def xy(self):
-        ax = self._joystick.axis_l
+    def xyz(self):
+        axy = self._joystick.axis_l
+        az = self._joystick.axis_r
         def calc_threshold(value, threshold=axis_threshold):
             if value >= 0.0:
                 return 0.0 if value<threshold else (value-threshold)/(1-threshold)
             else:
                 return 0.0 if value>-threshold else (value+threshold)/(1-threshold)
-        return tuple(map(calc_threshold, (ax.x, -ax.y)))
+        return tuple(map(calc_threshold, (axy.x, -axy.y, -az.y)))
     
     def rumble(self):
         self._joystick.set_rumble(0.333,0.333,200)
@@ -72,13 +77,13 @@ class GRBL(contextlib.AbstractContextManager):
         self._serial.__exit__(exc_type, exc_value, traceback)
     
     @staticmethod
-    def xyv_from_ax(ax,ay):
-        n = (ax**2+ay**2)**0.5
+    def xyzv_from_ax(ax,ay,az):
+        n = (ax**2+ay**2+az**2)**0.5
         if n > 0.0:
             v = v_max * n if n<1 else v_max
-            return ax/n, ay/n, v
+            return ax/n, ay/n, az/n, v
         else:
-            return 0.0, 0.0, 0.0
+            return 0.0, 0.0, 0.0, 0.0
 
     @staticmethod
     def calc_s(v, dt):
@@ -103,20 +108,26 @@ class GRBL(contextlib.AbstractContextManager):
     def home(self):
         self.send('$H')
     
-    def jog(self, x, y, v):
+    def jog(self, x, y, z, v):
         """
         grbl jog command
         x: mm
         y: mm
+        z: mm
         v: mm/s
         """
         F = 60 * v
-        self.send(f"$J=G91X{x:.3f}Y{y:.3f}F{F:.3f}")
+        self.send(f"$J=G91X{x:.3f}Y{y:.3f}Z{z:.3f}F{F:.3f}")
         
     def jog_cancel(self):
         self.send(chr(0x85))
 
-        
+    
+class UI:
+    def update(self):
+        pass
+    
+    
 def main(serial_file=None):
     class State(Enum):
         idle = 0
@@ -129,7 +140,7 @@ def main(serial_file=None):
         with Joystick() as joy:
             with GRBL(serial_file) as grbl:
                 while True:
-                    x, y, v = GRBL.xyv_from_ax(*joy.xy())
+                    x, y, z, v = GRBL.xyzv_from_ax(*joy.xyz())
 
                     if state == State.idle:
                         if v > 0.0:
@@ -150,7 +161,7 @@ def main(serial_file=None):
                             s = GRBL.calc_s(v, dt)
 
                             t = time.time()
-                            grbl.jog(s*x, s*y, v)
+                            grbl.jog(s*x, s*y, s*z, v)
                             dt -= time.time() - t
 
                     if dt > 0.0:
