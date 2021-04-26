@@ -10,7 +10,13 @@ from xbox360controller import Xbox360Controller
 
 import logging
 log = logging.getLogger()
-#log.setLevel(logging.DEBUG) # \todo
+log.setLevel(logging.DEBUG) # \todo
+
+class log:
+    debug = print
+    warning = print
+    info = print
+    error = print
 #log.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 
 
@@ -52,8 +58,8 @@ class Joystick(contextlib.AbstractContextManager):
     def rumble(self):
         self._joystick.set_rumble(0.333,0.333,200)
         
-    def home_pressed():
-        return self._joystick.button_start.is_pressed()
+    def home_pressed(self):
+        return self._joystick.button_start.is_pressed
         
         
 class SerialDummy(contextlib.AbstractContextManager):
@@ -119,7 +125,7 @@ class GRBL(contextlib.AbstractContextManager):
             self._serial = serial.Serial(port=serial_file, baudrate=115200)
         
         # Clear welcome message.
-        time.sleep(1)
+        time.sleep(2)
         log.info(self._serial.read_all())
         log.info(self.status())
 
@@ -131,10 +137,10 @@ class GRBL(contextlib.AbstractContextManager):
         self._serial.__exit__(exc_type, exc_value, traceback)
     
     def send(self, line):
-        self._serial.write(f"{line}{self.EOL}".encode())
+        self._serial.write(f"{line}\n".encode())
     
     # \todo\think read_until
-    def read(self, read_until=[b'ok', b'error', b'ALARM', b'<', b'[', b'Grbl']):
+    def read(self, read_until=[b'ok', b'error', b'ALARM']): #, b'<', b'[', b'Grbl']):
         """Read lines until ok or error."""
         lines = []
         while True:
@@ -148,7 +154,7 @@ class GRBL(contextlib.AbstractContextManager):
         self.send(send)
         lines = self.read()
         if lines[-1].startswith(b'error'):
-            error_code = int(lines[-1][len(b'error: '):])
+            error_code = int(lines[-1][len(b'error:'):])
             msg = f"Fuck, Shit! {self.error_strs[error_code]} Error ({error_code}) appeard after {send}."
             if error_code in allowed_errors:
                 log.debug(msg)
@@ -164,7 +170,7 @@ class GRBL(contextlib.AbstractContextManager):
         self._serial.readline()
         
     def home(self):
-        self.send('$H')
+        self.response('$H')
             
     
     @staticmethod
@@ -196,10 +202,11 @@ class GRBL(contextlib.AbstractContextManager):
         """
         F = 60 * v
         # \todo Error 8???
-        self.response(f"$J=G91X{x:.3f}Y{y:.3f}Z{z:.3f}F{F:.3f}", allowed_errors=[8,15])
+        ret = self.response(f"$J=G91X{x:.3f}Y{y:.3f}Z{z:.3f}F{F:.3f}", allowed_errors=[8,15])
+        return ret[-1].startswith(b'ok')
         
     def jog_cancel(self):
-        self.send(chr(0x85))
+        self.response(chr(0x85))
 
     
 class UI:
@@ -216,17 +223,20 @@ def main(serial_file=None):
     state = State.off
     dt = dt_idle
     
-    print("Press start to initiate homing cycle...")
-    
     try:
         with Joystick() as joy:
             with GRBL(serial_file) as grbl:
+                print("Press start to initiate homing cycle...")
+                
                 while True:
                     x, y, z, v = GRBL.xyzv_from_ax(*joy.xyz())
 
                     if state == State.off:
                         if joy.home_pressed():
+                            log.info("Homing start...")
                             grbl.home()
+                            log.info("Homing done.")
+                            joy.rumble()
                             state = State.ready
                         
                     elif state == State.ready:
@@ -246,7 +256,8 @@ def main(serial_file=None):
                             s = GRBL.calc_s(v, dt)
 
                             t = time.time()
-                            grbl.jog(s*x, s*y, s*z, v)
+                            if(not grbl.jog(s*x, s*y, s*z, v)):
+                                joy.rumble()
                             dt -= time.time() - t
 
                     if dt > 0.0:
