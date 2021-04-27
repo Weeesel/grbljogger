@@ -33,29 +33,33 @@ except Exception as e:
     
 class Off(State):
     @classmethod
-    def entered(cls):
+    def enter(cls):
         logging.info(f"Press start to play...")
-        
+
     @classmethod
-    def exit(cls):
+    def next(cls):
+       if App.input.home_pressed():
+            return Homing
+            
+class Homing(State):
+    @classmethod
+    def enter(cls):
         logging.info("Homing start...")
         App.grbl.home()
         logging.info("Homing done.")
         App.input.rumble()
-        return True
-
+    
     @classmethod
-    def event(cls):
-       if App.input.home_pressed():
-            return Ready
+    def next(cls):
+        return Ready
             
 class Ready(State):
     @classmethod
-    def entered(cls):
+    def enter(cls):
         App.dt = dt_idle
         
     @classmethod
-    def event(cls):
+    def next(cls):
         if App.v > 0.0:
             return Jog
     
@@ -67,7 +71,7 @@ class Jog(State):
         return True
         
     @classmethod
-    def event(cls):
+    def next(cls):
         if App.v == 0.0:
             return Ready
             

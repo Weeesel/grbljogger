@@ -24,13 +24,16 @@ class Base(ABC):
 
     
 class Keyboard(Base, contextlib.AbstractContextManager):
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+    
     def xyz(self):
         def ax_val(neg, pos):
             return float(keyboard.is_pressed(pos)) - float(keyboard.is_pressed(neg))
         return ax_val('left', 'right'), ax_val('down', 'up'), ax_val('page down', 'page up')
-        
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
+    
+    def speed(self):
+        return 1.0
     
     def home_pressed(self):
         return keyboard.is_pressed('h')
@@ -66,12 +69,12 @@ try:
         
         def speed(self):
             return calc_threshold(self._joystick.trigger_r.value)
-        
-        def rumble(self):
-            self._joystick.set_rumble(0.333,0.333,200)
             
         def home_pressed(self):
             return self._joystick.button_start.is_pressed
+        
+        def rumble(self):
+            self._joystick.set_rumble(0.333,0.333,200)
         
 except (ModuleNotFoundError, IOError):
     pass
