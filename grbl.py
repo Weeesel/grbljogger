@@ -113,10 +113,10 @@ class GRBL(contextlib.AbstractContextManager):
             
     
     @staticmethod
-    def xyzv_from_ax(ax,ay,az):
+    def xyzv_from_ax(ax, ay, az, av=1.0):
         n = (ax**2+ay**2+az**2)**0.5
         if n > 0.0:
-            v = v_max * n if n<1 else v_max
+            v = av * (v_max * n if n<1 else v_max)
             return ax/n, ay/n, az/n, v
         else:
             return 0.0, 0.0, 0.0, 0.0

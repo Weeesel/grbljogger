@@ -8,6 +8,12 @@ import keyboard
 
 axis_threshold = 0.2
 
+def calc_threshold(value, threshold=axis_threshold):
+    if value >= 0.0:
+        return 0.0 if value<threshold else (value-threshold)/(1-threshold)
+    else:
+        return 0.0 if value>-threshold else (value+threshold)/(1-threshold)
+
 
 class Base(ABC):
     @abstractmethod
@@ -56,12 +62,10 @@ try:
         def xyz(self):
             axy = self._joystick.axis_l
             az = self._joystick.axis_r
-            def calc_threshold(value, threshold=axis_threshold):
-                if value >= 0.0:
-                    return 0.0 if value<threshold else (value-threshold)/(1-threshold)
-                else:
-                    return 0.0 if value>-threshold else (value+threshold)/(1-threshold)
             return tuple(map(calc_threshold, (axy.x, -axy.y, -az.y)))
+        
+        def speed(self):
+            return calc_threshold(self._joystick.trigger_r.value)
         
         def rumble(self):
             self._joystick.set_rumble(0.333,0.333,200)

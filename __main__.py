@@ -94,7 +94,7 @@ class App:
         
         try:
             while True:
-                cls.x, cls.y, cls.z, cls.v = grbl.xyzv_from_ax(*input.xyz())
+                cls.x, cls.y, cls.z, cls.v = grbl.xyzv_from_ax(*input.xyz(), input.speed())
                 cls.fsm.event()
                 if cls.dt > 0.0:
                     time.sleep(cls.dt)
