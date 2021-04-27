@@ -1,81 +1,18 @@
-#!/usr/bin/env python3
 
-import argparse
-import sys
-import time
-import serial
 import contextlib
-from enum import Enum
-from xbox360controller import Xbox360Controller
-
+import time
 import logging
-log = logging.getLogger()
-log.setLevel(logging.DEBUG) # \todo
 
-class log:
-    debug = print
-    warning = print
-    info = print
-    error = print
-#log.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+from . import serial
 
-
-# \todo\think Don't normalize axis input feels strange when use of z-axis slows down x and y.
-
-
-# https://github.com/gnea/grbl/wiki/Grbl-v1.1-Jogging#how-to-compute-incremental-distances
 
 # \todo Read speed/acceleration settings from grbl.
 F_max = 3000 # max feedrate [mm/min]
 a_max = 1000 # max. acceleration [mm/s²]
-dt_idle = 0.1
-axis_threshold = 0.2
 
 v_max = F_max / 60
 
 
-class Joystick(contextlib.AbstractContextManager):
-    def __init__(self):
-        self._joystick = Xbox360Controller(0, axis_threshold=axis_threshold)
-    
-    def __enter__(self):
-        self._joystick.__enter__()
-        return self
-    
-    def __exit__(self, exc_type, exc_value, traceback):
-        self._joystick.__exit__(exc_type, exc_value, traceback)
-        
-    def xyz(self):
-        axy = self._joystick.axis_l
-        az = self._joystick.axis_r
-        def calc_threshold(value, threshold=axis_threshold):
-            if value >= 0.0:
-                return 0.0 if value<threshold else (value-threshold)/(1-threshold)
-            else:
-                return 0.0 if value>-threshold else (value+threshold)/(1-threshold)
-        return tuple(map(calc_threshold, (axy.x, -axy.y, -az.y)))
-    
-    def rumble(self):
-        self._joystick.set_rumble(0.333,0.333,200)
-        
-    def home_pressed(self):
-        return self._joystick.button_start.is_pressed
-        
-        
-class SerialDummy(contextlib.AbstractContextManager):
-    def __enter__(self):
-        return self
-    
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-    
-    def write(self, data):
-        print(data[:-1], end='\r\x1b[1K')
-        
-    def readline(self):
-        return b'ok\r\n'
-        
-        
 class GRBL(contextlib.AbstractContextManager):
     EOL = b'\r\n'
     error_strs = {
@@ -120,14 +57,16 @@ class GRBL(contextlib.AbstractContextManager):
     
     def __init__(self, serial_file=None):
         if serial_file is None:
-            self._serial = SerialDummy() 
+            self._serial = serial.Dummy() 
         else:
             self._serial = serial.Serial(port=serial_file, baudrate=115200)
         
         # Clear welcome message.
-        time.sleep(2)
-        log.info(self._serial.read_all())
-        log.info(self.status())
+        logging.debug(self._serial.readline())
+        logging.debug(self._serial.readline())
+        time.sleep(1)
+        logging.debug(self._serial.read_all())
+        logging.info(self.status())
 
     def __enter__(self):
         self._serial.__enter__()
@@ -157,7 +96,7 @@ class GRBL(contextlib.AbstractContextManager):
             error_code = int(lines[-1][len(b'error:'):])
             msg = f"Fuck, Shit! {self.error_strs[error_code]} Error ({error_code}) appeard after {send}."
             if error_code in allowed_errors:
-                log.debug(msg)
+                logging.debug(msg)
             else:
                 raise Exception(msg)
         return lines
@@ -207,73 +146,3 @@ class GRBL(contextlib.AbstractContextManager):
         
     def jog_cancel(self):
         self.response(chr(0x85))
-
-    
-class UI:
-    def update(self):
-        pass
-    
-    
-def main(serial_file=None):
-    class State(Enum):
-        off = 0
-        ready = 1
-        jog = 2
-
-    state = State.off
-    dt = dt_idle
-    
-    try:
-        with Joystick() as joy:
-            with GRBL(serial_file) as grbl:
-                print("Press start to initiate homing cycle...")
-                
-                while True:
-                    x, y, z, v = GRBL.xyzv_from_ax(*joy.xyz())
-
-                    if state == State.off:
-                        if joy.home_pressed():
-                            log.info("Homing start...")
-                            grbl.home()
-                            log.info("Homing done.")
-                            joy.rumble()
-                            state = State.ready
-                        
-                    elif state == State.ready:
-                        if v > 0.0:
-                            state = State.jog
-                            continue
-
-                    elif state == State.jog:
-                        if v == 0.0:
-                            # Immediately stop if we hit zero velocity and go to idle.
-                            grbl.jog_cancel()
-                            state = State.ready
-                            dt = dt_idle
-                        else:
-                            # We are jogging.
-                            dt = GRBL.calc_dt(v)
-                            s = GRBL.calc_s(v, dt)
-
-                            t = time.time()
-                            if(not grbl.jog(s*x, s*y, s*z, v)):
-                                joy.rumble()
-                            dt -= time.time() - t
-
-                    if dt > 0.0:
-                        time.sleep(dt)
-
-    except KeyboardInterrupt:
-        pass
-    
-print(f"""Parameters:
-  v_max: {v_max:.3f} mm/s
-  dt_max: {GRBL.calc_dt(v_max):.3f} s
-""")
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='GRBL Joystick Jogger.')
-    parser.add_argument('file', nargs='?', default=None, type=str, help='path to serial device e.g. /dev/ttyUSB0')
-    args = parser.parse_args()
-    main(args.file)
