@@ -14,7 +14,6 @@ logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 # https://github.com/gnea/grbl/wiki/Grbl-v1.1-Jogging#how-to-compute-incremental-distances
 
 dt_idle = 0.1
-axis_threshold = 0.2
 
     
 print(f"""Parameters:

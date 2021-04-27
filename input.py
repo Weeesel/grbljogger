@@ -6,6 +6,9 @@ import contextlib
 import keyboard
 
 
+axis_threshold = 0.2
+
+
 class Base(ABC):
     @abstractmethod
     def xyz(self): pass
@@ -32,6 +35,12 @@ class Keyboard(Base, contextlib.AbstractContextManager):
         
 try:
     from xbox360controller import Xbox360Controller
+    
+    try:
+        with Xbox360Controller():
+            pass
+    except Exception as e:
+        raise IOError(e)
 
     class Xbox360(Base, contextlib.AbstractContextManager):
         def __init__(self, id=0):
@@ -59,6 +68,6 @@ try:
             
         def home_pressed(self):
             return self._joystick.button_start.is_pressed
-            
-except ModuleNotFoundError:
+        
+except (ModuleNotFoundError, IOError):
     pass

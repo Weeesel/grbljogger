@@ -32,5 +32,5 @@ class Dummy(Base, contextlib.AbstractContextManager):
         return b'ok\r\n'
         
         
-class Serial(Base, serial.Serial):
+class Serial(serial.Serial, Base):
     pass
