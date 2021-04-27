@@ -32,46 +32,38 @@ except Exception as e:
     
     
 class Off(State):
-    @classmethod
-    def enter(cls):
+    def enter():
         logging.info(f"Press start to play...")
 
-    @classmethod
-    def next(cls):
+    def next():
        if App.input.home_pressed():
             return Homing
             
 class Homing(State):
-    @classmethod
-    def enter(cls):
+    def enter():
         logging.info("Homing start...")
         App.grbl.home()
         logging.info("Homing done.")
         App.input.rumble()
     
-    @classmethod
-    def next(cls):
+    def next():
         return Ready
             
 class Ready(State):
-    @classmethod
-    def enter(cls):
+    def enter():
         App.dt = dt_idle
         
-    @classmethod
-    def next(cls):
+    def next():
         if App.v > 0.0:
             return Jog
     
-class Jog(State):     
-    @classmethod
-    def exit(cls):
+class Jog(State):
+    def exit():
         # Immediately stop if we hit zero velocity and go to idle.
         App.grbl.jog_cancel()
         return True
         
-    @classmethod
-    def next(cls):
+    def next():
         if App.v == 0.0:
             return Ready
             
