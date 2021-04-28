@@ -11,8 +11,9 @@ import logging
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 # \todo\think Don't normalize axis input feels strange when use of z-axis slows down x and y.
-# https://github.com/gnea/grbl/wiki/Grbl-v1.1-Jogging#how-to-compute-incremental-distances
+# https://github.com/gnea/grbl/wiki/Grbl-v1.1-jogging#how-to-compute-incremental-distances
 
+    
 dt_idle = 0.1
 
     
@@ -31,77 +32,100 @@ except Exception as e:
     Input = input.Keyboard
     
     
-class Off(State):
-    def enter():
-        logging.info(f"Press start to play...")
+class app:
+    
+    # Main app states #########################################################
+    
+    class off(State):
+        def enter():
+            app.dt = dt_idle
+            logging.info(f"Press start to play...")
 
-    def next():
-       if App.input.home_pressed():
-            return Homing
-            
-class Homing(State):
-    def enter():
-        logging.info("Homing start...")
-        App.grbl.home()
-        logging.info("Homing done.")
-        App.input.rumble()
-    
-    def next():
-        return Ready
-            
-class Ready(State):
-    def enter():
-        App.dt = dt_idle
-        
-    def next():
-        if App.v > 0.0:
-            return Jog
-    
-class Jog(State):
-    def exit():
-        # Immediately stop if we hit zero velocity and go to idle.
-        App.grbl.jog_cancel()
-        return True
-        
-    def next():
-        if App.v == 0.0:
-            return Ready
-            
-        # We are jogging.
-        App.dt = App.grbl.calc_dt(App.v)
-        s = App.grbl.calc_s(App.v, App.dt)
+        def next():
+           if app.input.home_pressed():
+                return app.homing
 
-        t = time.time()
-        if(not grbl.jog(s*App.x, s*App.y, s*App.z, App.v)):
-            App.input.rumble()
-        App.dt -= time.time() - t
+    class homing(State):
+        def enter():
+            logging.info("Homing start...")
+            app.grbl.home()
+            logging.info("Homing done.")
+            app.input.rumble()
+
+        def next():
+            return app.ready
+
+    class ready(State):
+        def enter():
+            app.dt = dt_idle
+
+        def next():
+            if app.v > 0.0:
+                return app.jog
+
+    class jog(State):
+        def exit():
+            # Immediately stop if we hit zero velocity and go to idle.
+            app.grbl.jog_cancel()
+            return True
+
+        def next():
+            if app.v == 0.0:
+                return app.ready
+
+            # We are jogging.
+            app.dt = app.grbl.calc_dt(app.v)
+            s = app.grbl.calc_s(app.v, app.dt)
+
+            t = time.time()
+            if(not grbl.jog(s*app.x, s*app.y, s*app.z, app.v)):
+                app.input.rumble()
+            app.dt -= time.time() - t
+            
+    ###########################################################################
+            
+    class speed:
+        """Speed states."""
+        class locked(State):
+            def enter():
+                app.speed.locked.av = app.input.speed()
+            def next():
+                if input.speed_lock_pressed():
+                    return app.speed.variable
+            def speed():
+                return app.speed.locked.av
+            
+        class variable(State):
+            def next():
+                if input.speed_lock_pressed():
+                    return app.speed.Fixed
+            def speed():
+                return app.input.speed()
+            
+        def value():
+            return app.speed.fsm._state.speed()
     
-    
-class App:
-    v = 0.0
-    x,y,z = 0.0, 0.0, 0.0
-    dt = dt_idle
-    
-    @classmethod
-    def main(cls, input, grbl):
-        cls.input = input
-        cls.grbl = grbl
-        cls.fsm = FSM(Off)
+    def main(input, grbl):
+        app.input = input
+        app.grbl = grbl
+        app.fsm = FSM(app.off)
+        app.speed.fsm = FSM(app.speed.variable)
         
         try:
             while True:
-                cls.x, cls.y, cls.z, cls.v = grbl.xyzv_from_ax(*input.xyz(), input.speed())
-                cls.fsm.event()
-                if cls.dt > 0.0:
-                    time.sleep(cls.dt)
+                app.x, app.y, app.z, app.v = grbl.xyzv_from_ax(*app.input.xyz(), app.speed.value())
+                app.fsm.event()
+                app.speed.fsm.event()
+                if app.dt > 0.0:
+                    time.sleep(app.dt)
         except KeyboardInterrupt:
             pass
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='GRBL Xbox360Input Jogger.')
+    parser = argparse.ArgumentParser(description='GRBL Xbox360Input jogger.')
     parser.add_argument('file', nargs='?', default=None, type=str, help='path to serial device e.g. /dev/ttyUSB0')
     args = parser.parse_args()
     
     with Input() as input, GRBL(args.file) as grbl:
-        App.main(input, grbl)
+        app.main(input, grbl)

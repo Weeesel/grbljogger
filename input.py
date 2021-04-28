@@ -17,10 +17,16 @@ def calc_threshold(value, threshold=axis_threshold):
 
 class Base(ABC):
     @abstractmethod
-    def xyz(self): pass
-    @abstractmethod
-    def home_pressed(self): pass
-    def rumble(self): pass
+    def xyz(self): 
+        pass
+    def speed(self):
+        return 1.0
+    def home_pressed(self):
+        return False
+    def speed_lock_pressed(self):
+        return False
+    def rumble(self):
+        pass
 
     
 class Keyboard(Base, contextlib.AbstractContextManager):
@@ -32,14 +38,8 @@ class Keyboard(Base, contextlib.AbstractContextManager):
             return float(keyboard.is_pressed(pos)) - float(keyboard.is_pressed(neg))
         return ax_val('left', 'right'), ax_val('down', 'up'), ax_val('page down', 'page up')
     
-    def speed(self):
-        return 1.0
-    
     def home_pressed(self):
         return keyboard.is_pressed('h')
-    
-    def rumble(self):
-        pass
 
         
 try:
@@ -69,6 +69,9 @@ try:
         
         def speed(self):
             return calc_threshold(self._joystick.trigger_r.value)
+        
+        def speed_lock_pressed(self):
+            return self._joystick.button_thumb_r.is_pressed
             
         def home_pressed(self):
             return self._joystick.button_start.is_pressed
