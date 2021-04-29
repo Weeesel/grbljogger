@@ -39,7 +39,7 @@ class app:
     class off(State):
         def enter():
             app.dt = dt_idle
-            logging.info(f"Press start to play...")
+            print(f"Press start to play...")
 
         def next():
            if app.input.home_pressed():
@@ -47,9 +47,9 @@ class app:
 
     class homing(State):
         def enter():
-            logging.info("Homing start...")
+            print("Homing start...")
             app.grbl.home()
-            logging.info("Homing done.")
+            print("Homing done.")
             app.input.rumble()
 
         def next():
@@ -86,19 +86,35 @@ class app:
             
     class speed:
         """Speed states."""
+        _lock_button_released = True
+        
+        # \todo\think Should this go into input.py?
+        def _lock_button_event():
+            lock_button_pressed = app.input.speed_lock_pressed()
+            lock_button_was_released = app.speed._lock_button_released
+            app.speed._lock_button_released = not lock_button_pressed
+            # The button must first be released before we can issue a new event.
+            return lock_button_was_released and lock_button_pressed 
+        
         class locked(State):
             def enter():
                 app.speed.locked.av = app.input.speed()
+                print(f"Speed locked to {app.speed.locked.av*100:.2f} %")
+            
+            def exit():
+                print("Speed unlocked.")
+            
             def next():
-                if input.speed_lock_pressed():
+                if app.speed._lock_button_event():
                     return app.speed.variable
+                
             def speed():
                 return app.speed.locked.av
             
-        class variable(State):
+        class variable(State):            
             def next():
-                if input.speed_lock_pressed():
-                    return app.speed.Fixed
+                if app.speed._lock_button_event():
+                    return app.speed.locked
             def speed():
                 return app.input.speed()
             

@@ -7,7 +7,7 @@ from . import serial
 
 
 # \todo Read speed/acceleration settings from grbl.
-F_max = 3000 # max feedrate [mm/min]
+F_max = 6000 # max feedrate [mm/min]
 a_max = 1000 # max. acceleration [mm/s²]
 
 v_max = F_max / 60
