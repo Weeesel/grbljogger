@@ -6,13 +6,6 @@ import logging
 from . import serial
 
 
-# \todo Read speed/acceleration settings from grbl.
-F_max = 6000 # max feedrate [mm/min]
-a_max = 1000 # max. acceleration [mm/s²]
-
-v_max = F_max / 60
-
-
 class GRBL(contextlib.AbstractContextManager):
     EOL = b'\r\n'
     error_strs = {
@@ -67,6 +60,11 @@ class GRBL(contextlib.AbstractContextManager):
         time.sleep(1)
         logging.debug(self._serial.read_all())
         logging.info(self.status())
+        
+        # \todo Read speed/acceleration settings from grbl.
+        self.F_max = 6000 # max feedrate [mm/min]
+        # \todo This huge ass value works better than the real one, what is even going on?
+        self.a_max = 100000 # max. acceleration [mm/s²]
 
     def __enter__(self):
         self._serial.__enter__()
@@ -112,8 +110,8 @@ class GRBL(contextlib.AbstractContextManager):
         self.response('$H')
             
     
-    @staticmethod
-    def xyzv_from_ax(ax, ay, az, av=1.0):
+    def xyzv_from_ax(self, ax, ay, az, av=1.0):
+        v_max = self.F_max / 60
         n = (ax**2+ay**2+az**2)**0.5
         if n > 0.0:
             v = av * (v_max * n if n<1 else v_max)
@@ -125,11 +123,10 @@ class GRBL(contextlib.AbstractContextManager):
     def calc_s(v, dt):
         return v*dt
 
-    @staticmethod
-    def calc_dt(v):
+    def calc_dt(self, v):
         dt_min = 10e-3 # time it takes Grbl to parse and plan one jog command.
         N = 15 # Number of Grbl planner blocks.
-        return max(dt_min, v**2 / (2*a_max*(N-1)))
+        return max(dt_min, v**2 / (2*self.a_max*(N-1)))
     
     def jog(self, x, y, z, v):
         """
@@ -145,4 +142,4 @@ class GRBL(contextlib.AbstractContextManager):
         return ret[-1].startswith(b'ok')
         
     def jog_cancel(self):
-        self.response(chr(0x85))
+        self.response(chr(0x85), allowed_errors=[15])
