@@ -68,11 +68,10 @@ try:
             return tuple(map(calc_threshold, (axy.x, -axy.y, -az.y)))
         
         def speed(self):
-            # Use x**2 to slowdown more in the beginning.
-            return self._joystick.trigger_r.value**2
+            return calc_threshold(self._joystick.trigger_r.value)
         
         def speed_lock_pressed(self):
-            return self._joystick.button_trigger_r.is_pressed
+            return self._joystick.button_thumb_r.is_pressed
             
         def home_pressed(self):
             return self._joystick.button_start.is_pressed
